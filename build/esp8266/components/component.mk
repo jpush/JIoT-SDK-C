@@ -1,0 +1,1 @@
+COMPONENT_SRCDIRS := jiot-c-sdk

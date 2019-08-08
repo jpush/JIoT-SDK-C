@@ -1,0 +1,7 @@
+LIB_THIRD=`cd ../../lib-third; pwd`
+export LD_LIBRARY_PATH=$LIB_THIRD
+export LIBDIR=-L$LIB_THIRD
+
+echo "The environment variables have been set as follows:"
+echo LIBDIR=$LIBDIR
+echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
