@@ -16,7 +16,7 @@
 
 ### 系统版本支持
 
-X86, armV7, freeRTOS
+X86, armV7, esp8266(freeRTOS)
 
 
 
