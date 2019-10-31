@@ -17,8 +17,10 @@
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
+#include "user_ota.h"
 #include "jiot_client.h"
 
+#include "semphr.h"
 /*
 configs for demo:
 */
@@ -27,6 +29,7 @@ configs for demo:
 #define JIOT_PRODUCTKEY		"yourPRODUCTKEY"
 #define JIOT_DEVICENAME		"yourDEVICENAME"
 #define JIOT_DEVICESECRET	"yourDEVICESECRET"
+
 
 /*
 the levels for jiot-sdk:
@@ -78,6 +81,12 @@ int lltoa(char* buf, long long num) //need a buf with 21 bytes
 	return ret;
 }
 
+void httpsToHttp(char* dest, const char* src)
+{
+	strcpy(dest, "http");
+	strcat(dest, strchr(src, ':'));
+}
+
 #define PRINT_SEQNO(seqNo)\
     do\
     {\
@@ -86,6 +95,35 @@ int lltoa(char* buf, long long num) //need a buf with 21 bytes
         printf("message seqNo:[%s]\n", buf);\
     }\
     while(0)
+
+//ota praram
+static httpOTAParam gHttpOTAParam;
+static int gHttpOTAProcessing = 0;
+static JHandle gClienthandle = NULL;
+SemaphoreHandle_t  gHttpOTAProcessingMutex = NULL;
+int gSystemReboot = 0;
+
+int otaTaskInit(JHandle handle)
+{
+	gHttpOTAProcessingMutex = xSemaphoreCreateMutex();
+	gClienthandle = handle;
+	if(NULL == gHttpOTAProcessingMutex)
+	{
+		printf("otaTaskInit failed\n");
+		return -1;
+	}
+	return 0;
+}
+void otaTask(void* param)
+{
+	printf("otaTask start, processing[%d]\n", gHttpOTAProcessing);
+	httpOTA((httpOTAParam*)param);
+	xSemaphoreTake(gHttpOTAProcessingMutex, portMAX_DELAY);
+	gHttpOTAProcessing = 0;
+	printf("otaTask end, processing[%d]\n", gHttpOTAProcessing);
+	xSemaphoreGive(gHttpOTAProcessingMutex);
+	vTaskDelete(NULL);
+}
 
 int propertyReportReq(JHandle handle, DEV* pDev,Property * property,int size)
 {
@@ -278,7 +316,146 @@ int msgDeliverReq(void* pContext,JHandle handle,MsgDeliverReq *Req,int errcode)
     tblock = localtime(&timer);
 
     printf("time:[%d/%d/%d %d:%d:%d]\n", tblock->tm_year+1900,tblock->tm_mon+1,tblock->tm_mday,tblock->tm_hour,tblock->tm_min,tblock->tm_sec);
+    return 0;
 
+}
+esp_err_t otaReportReq(httpOTACallbackParam* param)
+{
+//	printf("otaReportReq step[%d] percent[%d] desc %s\n", param->step, param->downloadPercent, param->desc);
+
+	// report status
+	OtaStatusReportReq req;
+	req.desc = param->desc;
+	req.seq_no = 0;
+	req.step = 0;
+	req.task_id = param->taskId;
+	static int preDownloadPercent = 0;
+
+	switch(param->step)
+	{
+	case OTA_STEP_INIT:
+	case OTA_STEP_HTTP_DOWNLOAD_START:
+		break;
+	case OTA_STEP_HTTP_DOWNLOADING:
+		req.step = param->downloadPercent;
+		break;
+	case OTA_STEP_HTTP_DOWNLOAD_FINASHED:
+		req.step = 102;
+		break;
+	case OTA_STEP_SYSTEM_REBOOT:
+		req.desc = "FIRMWARE_CHECK_SUCCEED";
+		req.step = 103;
+		break;
+	case OTA_STEP_HTTP_DOWNLOAD_FAILED:
+		req.step = -2;
+		break;
+	case OTA_STEP_FIRMWARE_CHECK_FAILED:
+		req.step = -3;
+		break;
+	case OTA_STEP_FAILED:
+		req.step = -1;
+		break;
+	default:
+		break;
+	}
+
+//	printf("otaReportReq #debug step[%d] percent[%d] preDownloadPercent[%d] report step[%d]\n", param->step, param->downloadPercent, preDownloadPercent, req.step);
+	if(0 == req.step)
+	{
+		return 0;
+	}
+	if(param->step == OTA_STEP_HTTP_DOWNLOADING && (param->downloadPercent - preDownloadPercent < 20))
+	{
+		return 0;
+	}
+	if(param->step == OTA_STEP_HTTP_DOWNLOADING)
+	{
+		preDownloadPercent = param->downloadPercent;
+	}
+
+	printf("otaReportReq taskId[%ld] step[%d] percent[%d] report step[%d] desc %s\n", param->taskId, param->step, param->downloadPercent, req.step, req.desc);
+
+	if(NULL == gClienthandle)
+	{
+		printf("otaReportReq clienthandle err");
+		return -1;
+	}
+
+	JiotResult ret = jiotOtaStatusReportReq(gClienthandle, &req);
+	if(ret.errCode == 0)
+	{
+//	    printf("ota report success\n");
+	}
+	else
+	{
+		printf("ota report err,code:[%d]\n",ret.errCode);
+	}
+	return ret.errCode;
+}
+int otaReportRsp(void* pContext,JHandle handle,const OtaStatusReportRsp * Rsp,int errcode)
+{
+//  char buf[21] = {0};
+//  lltoa(buf, Rsp->seq_no);
+//	printf("otaReportRsp seqNo[%s] errcode[%d]\n", buf, errcode);
+	printf("otaReportRsp OK\n");
+	return 0;
+}
+
+char otaHttpUrl[1024] = {0};
+char otaChecksum[33] = {0};
+char otaVersion[20] = {0};
+int otaUpgradeReq(void* pContext,JHandle handle,OtaUpgradeInformReq *Req,int errcode)
+{
+    if (errcode != 0)
+    {
+        printf("otaUpgradeReq ota err code:[%d]\n",errcode);
+    }
+
+    printf("otaUpgradeReq:\n");
+    printf("url[%s] md5[%s]\n", Req->url, Req->md5);
+
+    // ota start
+	int isOtaRunning = 0;
+	xSemaphoreTake(gHttpOTAProcessingMutex, portMAX_DELAY);
+	if(0 == gHttpOTAProcessing)
+	{
+		gHttpOTAProcessing = 1;
+	}
+	else
+	{
+		isOtaRunning = 1;
+	}
+	xSemaphoreGive(gHttpOTAProcessingMutex);
+
+	if(isOtaRunning)
+	{
+		printf("otaUpgradeReq is Running\n");
+		return -1;
+	}
+
+	httpsToHttp(otaHttpUrl, Req->url);
+	strcpy(otaChecksum, Req->md5);
+	strcpy(otaVersion, Req->app_ver);
+	gHttpOTAParam.url = otaHttpUrl;
+	gHttpOTAParam.firmwareSize = Req->size;
+	gHttpOTAParam.checksum = otaChecksum;
+	gHttpOTAParam.version = otaVersion;
+	gHttpOTAParam.callback = otaReportReq;
+	gHttpOTAParam.taskId = Req->task_id;
+
+	BaseType_t ret = xTaskCreate(&otaTask,
+								  "otaTask",
+								  8192,
+								  (void*)&gHttpOTAParam,
+								  1,
+								  NULL);
+	if(pdPASS != ret)
+	{
+		printf("ota thread create err, ret[%d]\n", (int)ret);
+		gHttpOTAProcessing = 0;
+		return -1;
+	}
+	printf("ota thread created\n");
 
     return 0;
 
@@ -335,12 +512,14 @@ int check(JHandle handle)
 }
 
 
+
+
 int demo(const char* productKey, const char* deviceName, const char* deviceSecret)
 {
     printf("\nstart demo! @%ld\n", time(NULL));
 	int  ret = 0 ;
 
-	jiotSetLogLevel(DEBUG_LOG_LEVL);
+	jiotSetLogLevel(INFO_LOG_LEVL);
     DeviceInfo devinfo ;
     {
         strcpy(devinfo.szProductKey, productKey);
@@ -361,7 +540,8 @@ int demo(const char* productKey, const char* deviceName, const char* deviceSecre
 	cb._cbVersionReportRsp  =   versionReportRsp;
 	cb._cbPropertySetReq    =   propertySetReq;
 	cb._cbMsgDeliverReq     =   msgDeliverReq;
-
+	cb._cbOtaUpgradeInformReq     =   otaUpgradeReq;
+	cb._cbOtaStatusReportRsp      =   otaReportRsp;
 
 	JClientHandleCallback handleCb;
 
@@ -383,6 +563,7 @@ int demo(const char* productKey, const char* deviceName, const char* deviceSecre
 		printf("jClient init err \n");
 		return 0;
 	}
+	otaTaskInit(handle);
 
 	jiotRegister(handle,&Dev,&cb,&handleCb);
 
@@ -437,7 +618,7 @@ int demo(const char* productKey, const char* deviceName, const char* deviceSecre
         /* 版本上报 */
 		{
           printf("version report:\n");
-          strncpy(Dev.app_ver,"dengdeng1.1.0",32);
+          strncpy(Dev.app_ver,"v1.0.0",32);
 
           ret = versionReportReq(handle,&Dev,Dev.app_ver);
           if(ret == 0)
@@ -450,16 +631,19 @@ int demo(const char* productKey, const char* deviceName, const char* deviceSecre
           }
 		}
 
-		sleep(10);
+		sleep(1);
 	}
 
 	// waiting to accept message
-	for(int i = 0; i < 5; ++i)
+	for(int i = 0; i < 500; ++i)
 	{
-		printf("waiting to accept message \n");
-		sleep(10);
+		printf("time[%ld] waiting to accept message, VERSION v1.0.0, heap size[%d]\n", time(NULL), esp_get_free_heap_size());
+		sleep(5);
+		if(gSystemReboot)
+		{
+			break;
+		}
 	}
-
 
 	jiotDisConn(handle);
     printf("jiotDisConn \n");
@@ -472,9 +656,16 @@ int demo(const char* productKey, const char* deviceName, const char* deviceSecre
 
 	free(Dev.pProperty);
 	free(Dev.pEvent);
-
-
 	printf("demo exit \n");
+
+	if(gSystemReboot) // ota reboot
+	{
+		esp_restart();
+	    while(1)
+	    {
+	        sleep(1);
+	    }
+	}
     return 0;
 }
 
@@ -590,8 +781,10 @@ void app_main(void)
     setenv("TZ", "CST-8", 1);
     tzset();
 
-    // run demo
+    printf("WIFI_SSID: %s\n", WIFI_SSID);
+
     demo(JIOT_PRODUCTKEY, JIOT_DEVICENAME, JIOT_DEVICESECRET);
 
+    printf("end.\n");
 
 }

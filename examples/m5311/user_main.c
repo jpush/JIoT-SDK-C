@@ -617,7 +617,7 @@ void jiot_demo_task()
 		}
 		vTaskDelay(100);
 	}
-	
+
     // run demo
     demo(JIOT_PRODUCTKEY, JIOT_DEVICENAME, JIOT_DEVICESECRET);
     vTaskDelete(NULL);

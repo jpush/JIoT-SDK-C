@@ -463,7 +463,7 @@ int httpclient_retrieve_content(httpclient_t *client, char *data, int len,
     countdown_ms(&timer, timeout_ms);
 
     /* Receive data */
-    DEBUG_LOG("Current data: %s", data);
+//    DEBUG_LOG("Current data: %s", data);
 
     client_data->is_more = JIOT_TRUE;
 
@@ -591,7 +591,7 @@ int httpclient_retrieve_content(httpclient_t *client, char *data, int len,
             readLen = client_data->retrieve_len;
         }
 
-        DEBUG_LOG("Total-Payload: %d Bytes; Read: %d Bytes", readLen, len);
+//        DEBUG_LOG("Total-Payload: %d Bytes; Read: %d Bytes", readLen, len);
 
         do 
         {
@@ -729,6 +729,12 @@ int httpclient_response_parse(httpclient_t *client, char *data, int len, UINT32 
     /* try to read more header again until find response head ending "\r\n\r\n" */
     while (NULL == (ptr_body_end = strstr(data, "\r\n\r\n"))) 
     {
+    	/* check read length, against buf overflow */
+        if(len >= HTTPCLIENT_CHUNK_SIZE - HTTPCLIENT_RAED_HEAD_SIZE)
+        {
+        	return JIOT_ERR_HTTP_HEADER_TOO_LONG;
+        }
+
         /* try to read more header */
         ret = httpclient_recv(client, data + len,  HTTPCLIENT_RAED_HEAD_SIZE, &new_trf_len, left_ms(&timer));
         if (ret != JIOT_SUCCESS) 

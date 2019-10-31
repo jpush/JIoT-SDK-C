@@ -127,6 +127,23 @@ int parseSis(httpclient_data_t *client_data, SisInfo* sis)
 
     int valid = 0;
     char* port = obj->valuestring;
+	strcpy(sis->addr[0].host, strtok(port, ":"));
+    if(NULL != port)
+    {
+        ++valid;
+        sis->addr[0].port = atoi(strtok(NULL, ":"));
+    }
+
+    obj = cJiotJSON_GetObjectItem(root,"hub_addr2");
+    port = obj->valuestring;
+    strcpy(sis->addr[1].host, strtok(port, ":"));
+    if(NULL != port)
+    {
+        ++valid;
+        sis->addr[1].port = atoi(strtok(NULL, ":"));
+    }
+	/*
+	//rt-thread平台编译不过
     strcpy(sis->addr[0].host, strsep(&port, ":"));
     if(NULL != port)
     {
@@ -142,6 +159,7 @@ int parseSis(httpclient_data_t *client_data, SisInfo* sis)
         ++valid;
         sis->addr[1].port = atoi(port);
     }
+	*/
     if(valid <= 0 )
     {
         ERROR_LOG("none ip could be used, valid[%d]", valid);

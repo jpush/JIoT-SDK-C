@@ -1,0 +1,38 @@
+Import('RTT_ROOT')
+from building import *
+
+# get current directory
+cwd = GetCurrentDir()
+
+# The set of source files associated with this SConscript file.
+src = []
+path = []
+src += Glob('src/jclient/*.c')
+src += Glob('src/sisclient/*.c')
+src += Glob('src/mqtt/MQTTClient-C/src/*.c')
+src += Glob('src/mqtt/MQTTPacket/src/*.c')
+src += Glob('common/*.c')
+src += Glob('public/net/tcp/*.c')
+src += Glob('platform/os/rt-thread/*.c')
+
+path += [cwd + '/common']
+path += [cwd + '/include/jclient']
+path += [cwd + '/include/mqtt']
+path += [cwd + '/include/sisclient']
+path += [cwd + '/platform/os/rt-thread']
+path += [cwd + '/src/mqtt/MQTTPacket/src']
+path += [cwd + '/public/net/tcp']
+
+if GetDepend(['PKG_USING_JIOT_EXAMPLES']):
+	src += Glob('examples/rt-thread/*.c')
+	
+if GetDepend(['JIOT_SSL']):
+
+	src += Glob('public/net/ssl/*.c')
+	src += Glob('platform/ssl/mbedtls/*.c')
+	path += [cwd + '/platform/ssl/mbedtls']
+	path += [cwd + '/public/net/ssl']
+	
+group = DefineGroup('jiot-c-sdk', src, depend = [''], CPPPATH = path)
+
+Return('group')

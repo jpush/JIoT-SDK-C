@@ -57,6 +57,10 @@ typedef struct JClient
 #define EVENT_NAME_MAX_LEN      32
 #define EVENT_CONTENT_MAX_LEN   2048
 #define APP_VERSION_MAX_LEN     24
+#define APP_OTA_DESC_MAX_LEN    1024
+#define APP_OTA_STEP_VALUE_LEFT  -6
+#define APP_OTA_STEP_VALUE_RIGHT  104
+#define APP_OTA_STEP_VALUE_SUCCESS  200
 
 #define CODE_MAX 999
 #define CODE_OK  0 
@@ -85,6 +89,9 @@ if (NULL == X)\
 #define  JMQTT_TOPIC_VERSION_REPORT_REQ          "pub/sys/%s/%s/version/report"
 #define  JMQTT_TOPIC_IOT_PING_REQ                "pub/sys/%s/%s/iotping/req"
 #define  JMQTT_TOPIC_DEF_UP                      "pub/def/%s/%s/%s"            //上行
+//ota
+#define  JMQTT_TOPIC_OTA_UPGRADEINFORM_RSP       "pub/sys/%s/%s/ota/upgrade_inform_resp"
+#define  JMQTT_TOPIC_OTA_STATUSREPORT_REQ        "pub/sys/%s/%s/ota/status_report"
 
 #define  JMQTT_SUBTOPIC_SYS_4_DEV                    "sub/sys/%s/%s/+/+"        
 #define  JMQTT_SUBTOPIC_SYS_4_PRO                    "sub/sys/%s/*/msg/deliver"         
@@ -99,6 +106,10 @@ if (NULL == X)\
 
 #define  JMQTT_SHORTTOPIC_VERSION_REPORT_RSP          "version/report_resp"
 
+//ota
+#define  JMQTT_SHORTTOPIC_OTA_UPGRADEINFORM_REQ       "ota/upgrade_inform"
+#define  JMQTT_SHORTTOPIC_OTA_STATUSREPORT_RSP        "ota/status_report_resp"
+
 int _jiotPingReq(JClient * pClient);
 int _jiotPingRsp( void * pContext , MessageData * msg);
 
@@ -109,6 +120,10 @@ int _jiotEventReportRsp( void * pContext , MessageData * msg);
 int _jiotPropertySetReq( void * pContext , MessageData * msg);
 int _jiotMsgDeliverReq( void * pContext , MessageData * msg);
 int _jiotVersionReportRsp( void * pContext , MessageData * msg);
+
+// ota
+int _jiotOtaUpgradeInformReq(void* pContext, MessageData* msg);
+int _jiotOtaStatusReportRsp( void * pContext , MessageData * msg);
 
 
 int _jiotSubscribe(void * pContext);
@@ -157,7 +172,7 @@ void jiotSetLogLevel(int logLevl)
 
 JHandle jiotInit()
 {
-	INFO_LOG("SDK_VERSION[%s] SDK_BUILDID[%s]\n", SDK_VERSION, SDK_BUILDID);
+	INFO_LOG("SDK_VERSION[%s] SDK_PLATFORM[%s] SDK_BUILDID[%s]\n", SDK_VERSION, SDK_PLATFORM, SDK_BUILDID);
 
     JClient *pClient = jiot_malloc(sizeof(JClient));
 
@@ -206,6 +221,9 @@ JHandle jiotInit()
     pClient->cb._cbVersionReportRsp     = NULL;
     pClient->cb._cbPropertySetReq       = NULL;
     pClient->cb._cbMsgDeliverReq        = NULL;
+    pClient->cb._cbOtaUpgradeInformReq        = NULL;
+    pClient->cb._cbOtaStatusReportRsp         = NULL;
+
 
     pClient->handleCb._cbConnectedHandle         = NULL ;
     pClient->handleCb._cbConnectFailHandle       = NULL ;
@@ -238,6 +256,8 @@ void jiotRegister(JHandle handle,void* pContext, JClientMessageCallback *cb,JCli
     pClient->cb._cbVersionReportRsp     = cb->_cbVersionReportRsp;
     pClient->cb._cbPropertySetReq       = cb->_cbPropertySetReq;
     pClient->cb._cbMsgDeliverReq        = cb->_cbMsgDeliverReq;
+    pClient->cb._cbOtaUpgradeInformReq        = cb->_cbOtaUpgradeInformReq;
+    pClient->cb._cbOtaStatusReportRsp         = cb->_cbOtaStatusReportRsp;
     
     pClient->handleCb._cbConnectedHandle         = handleCb->_cbConnectedHandle;
     pClient->handleCb._cbConnectFailHandle       = handleCb->_cbConnectFailHandle;
@@ -264,6 +284,9 @@ void jiotUnRegister(JHandle handle)
     pClient->cb._cbVersionReportRsp     = NULL;
     pClient->cb._cbPropertySetReq       = NULL;
     pClient->cb._cbMsgDeliverReq        = NULL;
+    pClient->cb._cbOtaUpgradeInformReq        = NULL;
+    pClient->cb._cbOtaStatusReportRsp        = NULL;
+
 
     pClient->handleCb._cbConnectedHandle         = NULL;
     pClient->handleCb._cbConnectFailHandle       = NULL;
@@ -582,7 +605,8 @@ JiotResult jiotPropertyReportReq(JHandle handle,const PropertyReportReq *pReq)
                 break;
             }
 
-            if (strlen(pReq->pProperty[i].value) > PROPERTY_VALUE_MAX_LEN)
+            len = strlen(pReq->pProperty[i].value) ;
+            if (len > PROPERTY_VALUE_MAX_LEN ||(len <= 0))
             {
                 ERROR_LOG("property value format err [%s]",pReq->pProperty[i].value);
                 nRet = JIOT_ERR_PROPERTY_VALUE_FORMAT_ERROR; 
@@ -799,7 +823,7 @@ JiotResult jiotVersionReportReq(JHandle handle,const VersionReportReq * pReq)
         if(pReq->app_ver==NULL)
         {
             ERROR_LOG("app_ver is NULL ");
-            nRet = JIOT_ERR_VERSION_APP_VAR_FORMAT_ERROR; 
+            nRet = JIOT_ERR_VERSION_APP_ERROR;
             break;
         }
 
@@ -814,6 +838,7 @@ JiotResult jiotVersionReportReq(JHandle handle,const VersionReportReq * pReq)
         cJiotJSON_AddItemToObject(root,"seq_no",cJiotJSON_CreateInt64(seqNo));
         cJiotJSON_AddItemToObject(root,"app_ver",cJiotJSON_CreateString(pReq->app_ver));
         cJiotJSON_AddItemToObject(root,"sdk_ver",cJiotJSON_CreateString(SDK_VERSION));
+        cJiotJSON_AddItemToObject(root,"platform",cJiotJSON_CreateString(SDK_PLATFORM));
         cJiotJSON_AddItemToObject(root,"time",cJiotJSON_CreateInt64(jiot_timer_now()));
     }while(0);
     
@@ -848,7 +873,121 @@ JiotResult jiotVersionReportReq(JHandle handle,const VersionReportReq * pReq)
 
     return JRet;
 }
+JiotResult jiotOtaStatusReportReq(JHandle handle,const OtaStatusReportReq * pReq)
+{
+	char strBuf[21] = {0};
+    JiotResult JRet ;
+    JRet.errCode = JIOT_SUCCESS;
+    JRet.seqNo = -1;
 
+    JClient * pClient  = (JClient *)handle;
+    if(pClient == NULL)
+    {
+        JRet.errCode =  JIOT_ERR_JCLI_ERR;
+        return JRet ;
+    }
+
+    JMQTTClient * pJMqttCli =pClient->pJMqttCli;
+    if(pClient->pJMqttCli == NULL)
+    {
+        JRet.errCode =  JIOT_ERR_MQTT_ERR;
+        return JRet ;
+    }
+
+    if(pReq == NULL)
+    {
+        ERROR_LOG("PropertyReportReq argument is NULL");
+        JRet.errCode =  JIOT_ERR_ARGU_FORMAT_ERROR;
+        return JRet ;
+    }
+
+    int nRet = JIOT_SUCCESS;
+
+    long long  seqNo = pReq->seq_no ;
+    if(seqNo == 0)
+    {
+        seqNo = jiotNextSeqNo(handle);
+    }
+
+    cJiotJSON * root =  cJiotJSON_CreateObject();
+    do
+    {
+        if (seqNo <=0)
+        {
+        	jiot_lltoa(strBuf, seqNo);
+            ERROR_LOG("seq_no err [%s]", strBuf);
+            nRet = JIOT_ERR_SEQNO_ERROR;
+            break;
+        }
+
+        cJiotJSON_AddItemToObject(root,"seq_no",cJiotJSON_CreateInt64(seqNo));
+
+        cJiotJSON * data=cJiotJSON_CreateObject();
+        cJiotJSON_AddItemToObject(root,"data",data);
+
+        if (pReq->step != APP_OTA_STEP_VALUE_SUCCESS &&
+        		(pReq->step < APP_OTA_STEP_VALUE_LEFT || pReq->step > APP_OTA_STEP_VALUE_RIGHT))
+        {
+                ERROR_LOG("step value err [%d]",pReq->step);
+                nRet = JIOT_ERR_OTA_STEP_VALUE_ERROR;
+                break;
+        }
+        cJiotJSON_AddItemToObject(data,"step",cJiotJSON_CreateInt64(pReq->step));
+
+		if (pReq->desc == NULL)
+		{
+			ERROR_LOG("desc is NULL");
+			nRet = JIOT_ERR_OTA_FORMAT_ERROR;
+			break;
+		}
+        if (strlen(pReq->desc) == 0 || strlen(pReq->desc) > APP_OTA_DESC_MAX_LEN)
+        {
+            ERROR_LOG("desc format err [%s]",pReq->desc);
+            nRet = JIOT_ERR_OTA_DESC_FORMAT_ERROR;
+            break;
+        }
+    	cJiotJSON_AddItemToObject(data,"desc",cJiotJSON_CreateString(pReq->desc));
+
+        if (pReq->task_id < 0)
+        {
+			ERROR_LOG("task_id value err [%ld]",pReq->task_id);
+			nRet = JIOT_ERR_OTA_STEP_VALUE_ERROR;
+			break;
+        }
+        cJiotJSON_AddItemToObject(data,"task_id",cJiotJSON_CreateInt64(pReq->task_id));
+
+    }while(0);
+
+    if(nRet == JIOT_SUCCESS)
+    {
+        char* pPayload = cJiotJSON_PrintUnformatted(root) ;
+        char tempTopic[128] = {0};
+
+        sprintf(tempTopic,JMQTT_TOPIC_OTA_STATUSREPORT_REQ,pClient->szProductKey,pClient->szDeviceName);
+
+        MQTTMessage message = MQTTMessage_initializer ;
+        message.payload = (void*)pPayload;
+        message.payloadlen = strlen(pPayload);
+
+        nRet = jiot_mqtt_publish(pJMqttCli,tempTopic,&message,seqNo,E_JCLIENT_MSG_NORMAL);
+        if (nRet != JIOT_SUCCESS)
+        {
+            ERROR_LOG("publish message failed, Topic:[%s] message:[%s]",tempTopic,pPayload);
+        }
+        DEBUG_LOG("Topic:[%s] message:[%s]",tempTopic,pPayload);
+        if(pPayload != NULL)
+        {
+            jiot_free(pPayload);
+            pPayload = NULL;
+        }
+    }
+    cJiotJSON_Delete(root);
+
+    JRet.errCode = nRet;
+    JRet.seqNo = seqNo ;
+
+    return JRet;
+}
 
 int _jiotPropertySetRsp(JClient * pClient ,const PropertySetRsp * pRsp)
 {
@@ -1012,6 +1151,55 @@ int _jiotMsgDeliverRsp(JClient * pClient, MsgDeliverRsp * pRsp )
 
 }
 
+// ota
+int _jiotOtaUpgradeInformRsp(JClient * pClient ,const OtaUpgradeInformRsp * pRsp)
+{
+    int nRet = JIOT_SUCCESS;
+
+	if(pClient == NULL)
+    {
+        nRet =  JIOT_ERR_JCLI_ERR;
+        return nRet ;
+    }
+
+    JMQTTClient * pJMqttCli =pClient->pJMqttCli;
+    if(pClient->pJMqttCli == NULL)
+    {
+        nRet =  JIOT_ERR_MQTT_ERR;
+        return nRet ;
+    }
+
+
+    cJiotJSON * root =  cJiotJSON_CreateObject();
+    long long  seqNo = pRsp->seq_no ;
+    cJiotJSON_AddItemToObject(root,"seq_no",cJiotJSON_CreateInt64(seqNo));
+    cJiotJSON_AddItemToObject(root,"code",cJiotJSON_CreateInt64(pRsp->code));
+    char* pPayload = cJiotJSON_PrintUnformatted(root) ;
+    char tempTopic[128] = {0};
+
+    sprintf(tempTopic,JMQTT_TOPIC_OTA_UPGRADEINFORM_RSP,pClient->szProductKey,pClient->szDeviceName);
+
+    MQTTMessage message = MQTTMessage_Qos0_initializer ;
+    message.payload = (void*)pPayload;
+    message.payloadlen = strlen(pPayload);
+
+    nRet = jiot_mqtt_publish(pJMqttCli,tempTopic,&message,seqNo ,E_JCLIENT_MSG_NORMAL);
+    if (nRet != JIOT_SUCCESS)
+    {
+        ERROR_LOG("publish message failed, Topic:[%s] message:[%s]",tempTopic,pPayload);
+    }
+    DEBUG_LOG("Topic:[%s] message:[%s]",tempTopic,pPayload);
+    if(pPayload != NULL)
+    {
+        jiot_free(pPayload);
+        pPayload = NULL;
+    }
+
+    cJiotJSON_Delete(root);
+
+    return nRet;
+}
+
 int _jiotPingReq(JClient * pClient)
 {
 	char strBuf[21] = {0};
@@ -1160,6 +1348,16 @@ int _jiotSysMsg( void * pContext , MessageData * msg)
     if (0==strcmp(szShortTopicName,JMQTT_SHORTTOPIC_VERSION_REPORT_RSP))
     {
         return _jiotVersionReportRsp(pContext,msg);
+    }
+    else
+    if (0==strcmp(szShortTopicName,JMQTT_SHORTTOPIC_OTA_UPGRADEINFORM_REQ))
+    {
+        return _jiotOtaUpgradeInformReq(pContext,msg);
+    }
+    else
+    if (0==strcmp(szShortTopicName,JMQTT_SHORTTOPIC_OTA_STATUSREPORT_RSP))
+    {
+        return _jiotOtaStatusReportRsp(pContext,msg);
     }
     else
     {
@@ -1529,6 +1727,139 @@ int _jiotMsgDeliverReq( void * pContext , MessageData * msg)
 
     return nRet;   
 }
+// ota
+int _jiotOtaUpgradeInformReq(void* pContext, MessageData* msg)
+{
+    ENTRY;
+    JClient *pClient  = (JClient *)pContext;
+    if(pClient == NULL)
+    {
+        return JIOT_FAIL;
+    }
+
+    JMQTTClient * pJMqttCli =pClient->pJMqttCli;
+    if(pJMqttCli == NULL)
+    {
+        return JIOT_FAIL;
+    }
+
+    int nRet = JIOT_SUCCESS;
+    OtaUpgradeInformReq req;
+    memset(&req,0,sizeof(OtaUpgradeInformReq));
+
+
+    cJiotJSON * root = NULL;
+    do
+    {
+        root = cJiotJSON_Parse(msg->message->payload);
+        ASSERT_JSONOBJ(root);
+        cJiotJSON * obj  = NULL ;
+
+        obj = cJiotJSON_GetObjectItem(root,"seq_no");
+        ASSERT_JSONOBJ(obj);
+        req.seq_no = obj->valueint64;
+
+        cJiotJSON * data = NULL;
+        data = cJiotJSON_GetObjectItem(root,"data");
+        ASSERT_JSONOBJ(obj);
+
+        obj = cJiotJSON_GetObjectItem(data,"size");
+        ASSERT_JSONOBJ(obj);
+        req.size = obj->valueint64;
+
+        obj = cJiotJSON_GetObjectItem(data,"url");
+        ASSERT_JSONOBJ(obj);
+        req.url = obj->valuestring;
+
+        obj = cJiotJSON_GetObjectItem(data,"md5");
+        ASSERT_JSONOBJ(obj);
+        req.md5 = obj->valuestring;
+
+        obj = cJiotJSON_GetObjectItem(data,"app_ver");
+        ASSERT_JSONOBJ(obj);
+        req.app_ver = obj->valuestring;
+
+        obj = cJiotJSON_GetObjectItem(data,"task_id");
+        ASSERT_JSONOBJ(obj);
+        req.task_id = obj->valueint64;
+
+    }while(0);
+
+    OtaUpgradeInformRsp rsp ;
+    rsp.seq_no =  req.seq_no;
+    if (g_errcode != JIOT_SUCCESS)
+    {
+        rsp.code = g_errcode;
+    }
+    else
+    {
+        rsp.code = 0;
+    }
+
+    _jiotOtaUpgradeInformRsp(pClient,&rsp);
+
+    if (pClient->cb._cbOtaUpgradeInformReq != NULL)
+    {
+        pClient->cb._cbOtaUpgradeInformReq(pClient->pContext,(void*)pClient,&req,g_errcode);
+    }
+    else
+    {
+        ERROR_LOG("_cbOtaUpgradeReq not Register");
+    }
+
+    cJiotJSON_Delete(root);
+
+    return nRet;
+}
+int _jiotOtaStatusReportRsp( void * pContext , MessageData * msg)
+{
+    ENTRY;
+    JClient *pClient  = (JClient *)pContext;
+    if(pClient == NULL)
+    {
+        return JIOT_FAIL;
+    }
+
+    JMQTTClient * pJMqttCli =pClient->pJMqttCli;
+    if(pJMqttCli == NULL)
+    {
+        return JIOT_FAIL;
+    }
+
+    int nRet = JIOT_SUCCESS;
+    OtaStatusReportRsp rsp;
+    memset(&rsp,0,sizeof(VersionReportRsp));
+
+    cJiotJSON * root = NULL;
+    do
+    {
+        root = cJiotJSON_Parse(msg->message->payload);
+        ASSERT_JSONOBJ(root);
+        cJiotJSON * obj  = NULL ;
+
+        obj = cJiotJSON_GetObjectItem(root,"seq_no");
+        ASSERT_JSONOBJ(root);
+        rsp.seq_no = obj->valueint64;
+
+        obj = cJiotJSON_GetObjectItem(root,"code");
+        ASSERT_JSONOBJ(root);
+        rsp.code = obj->valueint64;
+    }while(0);
+
+    if (pClient->cb._cbOtaStatusReportRsp != NULL)
+    {
+        pClient->cb._cbOtaStatusReportRsp(pClient->pContext,(void*)pClient,&rsp,g_errcode);
+    }
+    else
+    {
+        ERROR_LOG("cbOtaReportRsp not Register");
+    }
+
+    cJiotJSON_Delete(root);
+
+    return nRet;
+}
+
 
 int _jiotPingRsp( void * pContext , MessageData * msg)
 {

@@ -1907,7 +1907,7 @@ int jiot_create_thread(JMQTTClient * pClient)
     {
         pClient->isRun = false ;
         ERROR_LOG("run jiot_retrans_thread error!");
-        jiot_pthread_cancel(&pClient->threadRecv);
+        jiot_pthread_cancel(&pClient->threadRetrans);
         return JIOT_FAIL;
     }
 

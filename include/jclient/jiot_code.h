@@ -22,6 +22,7 @@
 #define  JIOT_ERR_EVENT_CONTENT_FORMAT_ERROR         10016              //事件内容异常
 #define  JIOT_ERR_DATA_CONTENT_FORMAT_ERROR          10017              //数据内容异常
 #define  JIOT_ERR_VERSION_APP_VAR_FORMAT_ERROR       10018              //版本信息异常
+#define  JIOT_ERR_VERSION_APP_ERROR 				 10019				//版本异常
   
 #define  JIOT_ERR_MQTT_ERR                           11001              //MQTT异常
 #define  JIOT_ERR_MQTT_PING_PACKET_ERROR             11002              //MQTT心跳异常
@@ -68,6 +69,8 @@
 #define  JIOT_ERR_SIS_CONTENT_ERROR                 14004               //SIS 数据内容错误
 #define  JIOT_ERR_SIS_JSON_PARSE_FAIL               14005               //SIS Json解析错误
 
-
+#define  JIOT_ERR_OTA_DESC_FORMAT_ERROR       		15001               //ota DESC格式错误
+#define  JIOT_ERR_OTA_STEP_VALUE_ERROR       		15002               //ota STEP错误
+#define  JIOT_ERR_OTA_FORMAT_ERROR            		15003				//ota异常
 
 #endif

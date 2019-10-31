@@ -1,4 +1,6 @@
 #include "jiot_network_ssl.h"
+#include "jiot_timer.h"
+#include "jiot_pthread.h"
 #include "jiot_log.h"
 
 
@@ -122,6 +124,8 @@ int jiot_network_ssl_read(TLSDataParams *pTlsData, unsigned char *buffer, int le
     size_t readLen = 0;
     int ret = -1;
 
+    S_JIOT_TIME_TYPE nowTime;
+	jiot_timer_now_clock(&nowTime);
     mbedtls_ssl_conf_read_timeout(&(pTlsData->conf), timeout_ms);
     while (readLen < len)
     {
@@ -132,6 +136,11 @@ int jiot_network_ssl_read(TLSDataParams *pTlsData, unsigned char *buffer, int le
         }
         else if (ret == 0 || ret == MBEDTLS_ERR_SSL_TIMEOUT)
         {
+            //释放线程的时间片，防止线程调度异常
+            int spend_time_ms = jiot_timer_spend(&nowTime);
+			if(timeout_ms - spend_time_ms > 0){
+				jiot_sleep(5);
+			}
             return JIOT_ERR_SSL_READ_TIMEOUT; //eof
         }
         else

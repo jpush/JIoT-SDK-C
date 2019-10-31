@@ -1,0 +1,36 @@
+menu "jiot c sdk"
+
+    config RT_USING_JIOT_C_SDK
+        bool "Using JIoT C SDK Library"
+		select RT_USING_SAL
+		select SAL_USING_POSIX
+        default y
+		
+		config JIOT_SSL
+			bool "Using JIoT SSL"
+			default n
+			select PKG_USING_MBEDTLS
+			
+		config PKG_USING_JIOT_EXAMPLES
+			bool "Using JIoT Examples"
+			default y
+			
+		config PKG_USING_JIOT_PRODUCT_KEY
+			string "Config Product Key"
+			default ""
+			
+		config PKG_USING_JIOT_DEVICE_NAME
+			string "Config Device Name"
+			default ""
+			
+		config PKG_USING_JIOT_DEVICE_SECRET
+			string "Config Device Secret"
+			default ""
+    
+endmenu
+
+
+config SDK_PLATFORM
+	string
+	default "rt-thread"
+	

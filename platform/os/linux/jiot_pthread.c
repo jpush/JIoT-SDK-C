@@ -73,11 +73,12 @@ INT32 jiot_pthread_cancel(S_JIOT_PTHREAD*handle)
     INT32 nRet = JIOT_SUCCESS;
     if(handle->threadID != 0)
     {
-        nRet = pthread_cancel(handle->threadID);
-        if (nRet != 0)
-        {
-            return JIOT_FAIL;
-        }
+    	pthread_cancel(handle->threadID);
+//        nRet = pthread_cancel(handle->threadID); //这里会cancel一个已经执行完的线程而报错ESRCH
+//        if (nRet != 0)
+//        {
+//            return JIOT_FAIL;
+//        }
     }
 
     return JIOT_SUCCESS;

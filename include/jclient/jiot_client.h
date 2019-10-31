@@ -9,7 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SDK_VERSION "v1.0.5"
+#define SDK_VERSION "v1.0.7"
+
+#ifndef SDK_PLATFORM
+#define SDK_PLATFORM "unknown"
+#endif
 
 #define NO_LOG_LEVL         0       //不输出日志
 #define ERROR_LOG_LEVL      1       //输出错误日志
@@ -132,6 +136,36 @@ typedef struct VersionReportRsp
   int code ;    
 }VersionReportRsp;
 
+// ota
+typedef struct OtaUpgradeInformReq
+{
+  long long  seq_no;
+  unsigned int size;
+  char* url;
+  char* md5;
+  char* app_ver;
+  long task_id;
+}OtaUpgradeInformReq;
+typedef struct OtaUpgradeInformRsp
+{
+  long long  seq_no ;
+  int code ;
+}OtaUpgradeInformRsp;
+
+typedef struct OtaStatusReportReq
+{
+  long long  seq_no ;
+  int  step ;
+  char* desc ;
+  long task_id;
+}OtaStatusReportReq;
+typedef struct OtaStatusReportRsp
+{
+  long long  seq_no ;
+  int code ;
+}OtaStatusReportRsp;
+
+
 
 /**
  * 函数说明: 处理服务端返回JIOT客户端上报设备属性请求回复
@@ -178,6 +212,23 @@ typedef int jiotPropertySetReq(void* pContext,JHandle handle,PropertySetReq *Req
  */
 typedef int jiotMsgDeliverReq(void* pContext,JHandle handle,MsgDeliverReq *Req,int errcode);
 
+/**
+ * 函数说明: 服务端下发给JIOT客户下发OTA升级请求。
+ * 参数:    pContext:用户注册的上下文信息
+ *          handle  JIOT客户端句柄
+ *          Req :OTA升级信息的结构体指针
+ *          errcode :错误码
+ */
+typedef int jiotOtaUpgradeInformReq(void* pContext,JHandle handle,OtaUpgradeInformReq *Req,int errcode);
+
+/**
+ * 函数说明: JIOT客户端上报OTA升级状态回复
+ * 参数:    pContext:用户注册的上下文信息
+ *          handle  JIOT客户端句柄
+ *          pResp :接收回复消息的结构体指针
+ *          errcode :错误码
+ */
+typedef int jiotOtaStatusReportRsp(void* pContext,JHandle handle,const OtaStatusReportRsp * Rsp,int errcode);
 
 //JClient处理接收消息的回调函数
 typedef struct JClientMessageCallback
@@ -187,6 +238,8 @@ typedef struct JClientMessageCallback
     jiotVersionReportRsp    *_cbVersionReportRsp;
     jiotPropertySetReq      *_cbPropertySetReq;      
     jiotMsgDeliverReq       *_cbMsgDeliverReq;
+    jiotOtaUpgradeInformReq *_cbOtaUpgradeInformReq;
+    jiotOtaStatusReportRsp  *_cbOtaStatusReportRsp;
 } JClientMessageCallback;
 
 /**
@@ -328,7 +381,13 @@ JiotResult jiotEventReportReq(JHandle handle,const EventReportReq *pReq);
  */
 JiotResult jiotVersionReportReq(JHandle handle,const VersionReportReq * pReq);
 
-
+/**
+ * 函数说明: JIOT客户端上报设备OTA升级状态请求。
+ * 参数:    handle  JIOT客户端句柄
+ *          pReq :上报消息的结构体指针
+ * 返回值：
+ */
+JiotResult jiotOtaStatusReportReq(JHandle handle,const OtaStatusReportReq * pReq);
 
 #endif
 

@@ -14,14 +14,23 @@
 
 
 
-### 系统版本支持
+### 平台支持
 
-X86, armV7, esp8266(freeRTOS)
-
+- x86(linux)
+- armv7(linux)
+- esp8266(freeRTOS, wifi)
+- stm32(rt-thread)
+- m5311(freeRTOS, nbiot)
 
 
 ### 相关文档
 
-- [JIoT C SDK 接口文档](https://docs.jiguang.cn//jiot/client/c_sdk_api/)
-- [JIoT C SDK 集成指南](https://docs.jiguang.cn//jiot/client/c_sdk_guide)
-- [JIoT C SDK esp 8266 集成指南](https://docs.jiguang.cn//jiot/client/c_sdk_8266_guide/)
+
+
+- [JIoT C SDK 接口](https://docs.jiguang.cn/jiot/client/c_sdk_api)
+- [JIoT C SDK OTA说明](https://docs.jiguang.cn/jiot/client/c_sdk_ota_readme)
+- [JIoT C SDK armv7集成指南](https://docs.jiguang.cn/jiot/client/c_sdk_armv7_guide)
+- [JIoT C SDK x86集成指南](https://docs.jiguang.cn/jiot/client/c_sdk_x86_guide)
+- [JIoT C SDK esp8266集成指南](https://docs.jiguang.cn/jiot/client/c_sdk_8266_guide)
+- [JIoT C SDK rt-thread集成指南](https://docs.jiguang.cn/jiot/client/c_sdk_rt_thread_guide)
+- [JIoT C SDK m5311集成指南](https://docs.jiguang.cn/jiot/client/c_sdk_m5311_guide)

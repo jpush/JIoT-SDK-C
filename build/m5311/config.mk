@@ -1,6 +1,7 @@
 
 include $(JIOT_C_SDK)/build/m5311/buildid.mk
-CFLAGS += -DJIOT_SSL
+CFLAGS += -DJIOT_SSL 
+CFLAGS += -DSDK_PLATFORM='"m5311"'
 
 SRC_DIRS += $(JIOT_C_SDK)/common
 SRC_DIRS += $(JIOT_C_SDK)/examples/m5311

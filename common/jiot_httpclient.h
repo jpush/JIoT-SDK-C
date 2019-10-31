@@ -57,14 +57,14 @@ extern "C"
 #define  JIOT_ERR_HTTP_ERROR                         -18006               //HTTP位置错误 
 #define  JIOT_ERR_HTTP_CLOSED                        -18007               //远程Host关闭连接
 #define  JIOT_ERR_HTTP_BREAK                         -18008               //连接中断
-
+#define  JIOT_ERR_HTTP_HEADER_TOO_LONG               -18009               //HPPT头过长
 
 #define  HTTPCLIENT_MIN(x,y) (((x)<(y))?(x):(y))
 #define  HTTPCLIENT_MAX(x,y) (((x)>(y))?(x):(y))
 
 #define  HTTPCLIENT_AUTHB_SIZE     128
 
-#define  HTTPCLIENT_CHUNK_SIZE     512
+#define  HTTPCLIENT_CHUNK_SIZE     1152 //wenhe
 #define  HTTPCLIENT_RAED_HEAD_SIZE 128            /* read header */
 #define  HTTPCLIENT_SEND_BUF_SIZE  512
  

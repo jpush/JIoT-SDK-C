@@ -1,11 +1,13 @@
 #ifndef JIOT_NETWORK_DEFINE_H
 #define JIOT_NETWORK_DEFINE_H
 
+
+
+#include "jiot_network.h"
+
 #ifdef JIOT_SSL
 #include "jiot_network_ssl.h"
 #endif
-
-#include "jiot_network.h"
 
 typedef struct {
     char *pHostAddress;                 ///< Pointer to a string defining the endpoint for the service

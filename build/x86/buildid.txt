@@ -1,0 +1,1 @@
+set(JIOT_SDK_BUILDID "0")

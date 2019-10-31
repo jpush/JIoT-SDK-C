@@ -1,4 +1,4 @@
 
 
-CFLAGS += -DSDK_BUILDID='"1122"'
+CFLAGS += -DSDK_BUILDID='"0"'
 
